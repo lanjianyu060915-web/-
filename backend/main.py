@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import DATABASE_PATH, init_db, iter_connection
-from schemas import HealthResponse, Person, PersonCreate, RecognitionRecord
+from face_service import extract_embedding
+from schemas import FaceEmbedding, HealthResponse, Person, PersonCreate, RecognitionRecord
 
 
 @asynccontextmanager
@@ -82,7 +92,89 @@ def create_person(payload: PersonCreate, connection: Connection) -> dict:
     return dict(created)
 
 
-@app.delete("/api/persons/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.post(
+    "/api/persons/{person_id}/faces",
+    response_model=list[FaceEmbedding],
+    status_code=status.HTTP_201_CREATED,
+)
+def register_person_faces(
+    person_id: int,
+    connection: Connection,
+    files: list[UploadFile] = File(...),
+) -> list[dict]:
+    person = connection.execute(
+        "SELECT id FROM persons WHERE id = ?",
+        (person_id,),
+    ).fetchone()
+    if person is None:
+        raise HTTPException(status_code=404, detail="人员不存在")
+
+    if not files:
+        raise HTTPException(status_code=422, detail="请至少上传一张人脸照片")
+
+    created_faces: list[dict] = []
+    for uploaded_file in files:
+        image_bytes = uploaded_file.file.read()
+        if not image_bytes:
+            file_name = uploaded_file.filename or "未命名文件"
+            raise HTTPException(status_code=422, detail=f"文件 {file_name} 为空")
+
+        embedding = extract_embedding(image_bytes)
+        cursor = connection.execute(
+            """
+            INSERT INTO face_embeddings (person_id, file_name, content_type, embedding_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                person_id,
+                uploaded_file.filename,
+                uploaded_file.content_type,
+                json.dumps(embedding),
+            ),
+        )
+
+        created_faces.append(
+            {
+                "id": cursor.lastrowid,
+                "person_id": person_id,
+                "file_name": uploaded_file.filename,
+                "content_type": uploaded_file.content_type,
+                "embedding": embedding,
+            }
+        )
+
+    connection.commit()
+
+    created_ids = [face["id"] for face in created_faces]
+    placeholders = ",".join("?" for _ in created_ids)
+    cursor = connection.execute(
+        f"""
+        SELECT id, person_id, file_name, content_type, embedding_json, created_at
+        FROM face_embeddings
+        WHERE id IN ({placeholders})
+        ORDER BY id
+        """,
+        created_ids,
+    )
+    return [
+        {
+            "id": row["id"],
+            "person_id": row["person_id"],
+            "file_name": row["file_name"],
+            "content_type": row["content_type"],
+            "embedding": json.loads(row["embedding_json"]),
+            "created_at": row["created_at"],
+        }
+        for row in cursor.fetchall()
+    ]
+
+
+@app.delete(
+    "/api/persons/{person_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+)
 def delete_person(person_id: int, connection: Connection) -> None:
     cursor = connection.execute("DELETE FROM persons WHERE id = ?", (person_id,))
     connection.commit()
