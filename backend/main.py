@@ -96,6 +96,8 @@ def create_person(payload: PersonCreate, connection: Connection) -> dict:
     "/api/persons/{person_id}/faces",
     response_model=list[FaceEmbedding],
     status_code=status.HTTP_201_CREATED,
+    summary="注册人员人脸照片",
+    description="为指定人员上传一张或多张人脸照片，并保存当前阶段的占位人脸特征。",
 )
 def register_person_faces(
     person_id: int,
