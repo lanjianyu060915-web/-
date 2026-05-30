@@ -68,7 +68,7 @@ def _get_face_app() -> Any:
             app.prepare(ctx_id=-1, det_size=_DETECTION_SIZE)
         except Exception as exc:  # noqa: BLE001 - convert dependency/model errors into API-safe text.
             _FACE_APP_ERROR = (
-                "人脸识别模型初始化失败：请确认 insightface、onnxruntime、opencv-python "
+                "人脸识别模型初始化失败：请确认 insightface、onnxruntime、opencv-python-headless "
                 "已正确安装，并且首次运行时能够下载 InsightFace 模型。"
                 f" 原始错误：{exc}"
             )
@@ -85,7 +85,7 @@ def _decode_image(image: bytes) -> Any:
         import numpy as np
     except Exception as exc:  # noqa: BLE001 - dependency availability is runtime environment dependent.
         raise FaceModelUnavailableError(
-            "图片解码依赖不可用：请安装 opencv-python 和 numpy 后重启服务。"
+            "图片解码依赖不可用：请安装 opencv-python-headless 和 numpy 后重启服务。"
             f" 原始错误：{exc}"
         ) from exc
 
@@ -136,7 +136,13 @@ def extract_embeddings(image: bytes) -> list[FaceEmbeddingResult]:
     """
     decoded_image = _decode_image(image)
     app = _get_face_app()
-    faces = app.get(decoded_image)
+    try:
+        faces = app.get(decoded_image)
+    except Exception as exc:  # noqa: BLE001 - keep model runtime failures API-safe.
+        raise FaceModelUnavailableError(
+            "人脸识别模型运行失败：请确认 InsightFace 模型文件完整且 onnxruntime 可用。"
+            f" 原始错误：{exc}"
+        ) from exc
     if not faces:
         raise NoFaceDetectedError("未检测到人脸，请上传包含清晰正脸的照片")
 
