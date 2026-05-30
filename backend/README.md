@@ -55,10 +55,32 @@ backend/data/face_system.db
 - `POST /api/persons`：新增人员
 - `DELETE /api/persons/{person_id}`：删除人员
 - `GET /api/records`：查询识别记录
+- `POST /api/persons/{person_id}/faces`：为指定人员注册多张人脸照片，并保存占位人脸特征
+
+## 注册人脸照片接口测试
+
+当前阶段的人脸特征提取仍是可替换的占位实现，不会接入 InsightFace，也不会下载人脸识别模型。接口支持使用 `multipart/form-data` 一次上传多张图片，文件字段名必须为 `files`。
+
+先创建一个人员：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/persons \
+  -H "Content-Type: application/json" \
+  -d '{"name":"张三","person_code":"P001","department":"测试部门"}'
+```
+
+假设返回的人员 `id` 为 `1`，再注册人脸照片：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/persons/1/faces \
+  -F "files=@/path/to/face-1.jpg" \
+  -F "files=@/path/to/face-2.jpg"
+```
+
+接口会返回本次保存的人脸特征记录列表，其中 `embedding` 字段目前是模拟特征向量。
 
 ## 暂未实现
 
-- 人脸图片上传
-- 人脸特征提取
+- 真实人脸特征提取
 - InsightFace 模型接入
 - 前端接口联调

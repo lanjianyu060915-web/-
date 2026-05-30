@@ -38,3 +38,12 @@ class RecognitionRecord(BaseModel):
     similarity: Optional[float] = None
     status: str
     created_at: datetime
+
+
+class FaceEmbedding(BaseModel):
+    id: int
+    person_id: int
+    file_name: Optional[str] = None
+    content_type: Optional[str] = None
+    embedding: list[float]
+    created_at: datetime
