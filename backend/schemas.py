@@ -40,6 +40,13 @@ class RecognitionRecord(BaseModel):
     created_at: datetime
 
 
+class RecognitionResult(BaseModel):
+    name: str
+    person_code: Optional[str] = None
+    similarity: Optional[float] = None
+    status: str
+
+
 class FaceEmbedding(BaseModel):
     id: int
     person_id: int

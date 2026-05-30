@@ -1,6 +1,6 @@
 # FastAPI 后端基础框架
 
-这是人脸识别系统课程项目的第二阶段后端框架。在第一阶段的人员与识别记录基础 API、SQLite 初始化逻辑之上，当前增加了人脸照片注册接口，但仍未接入 InsightFace 或其他人脸识别模型。
+这是人脸识别系统课程项目的第三阶段后端框架。在第一阶段的人员与识别记录基础 API、第二阶段的人脸照片注册接口之上，当前增加了基于占位 embedding 的识别接口，但仍未接入 InsightFace 或其他人脸识别模型。
 
 ## 环境要求
 
@@ -54,8 +54,9 @@ backend/data/face_system.db
 - `GET /api/persons`：查询人员列表
 - `POST /api/persons`：新增人员
 - `DELETE /api/persons/{person_id}`：删除人员
-- `GET /api/records`：查询识别记录
+- `GET /api/records`：查询最近识别记录
 - `POST /api/persons/{person_id}/faces`：为指定人员注册多张人脸照片，并保存占位人脸特征
+- `POST /api/recognize`：上传一张图片并与已注册占位人脸特征逐个比对，返回识别结果并写入识别记录
 
 ## 注册人脸照片接口测试
 
@@ -78,6 +79,30 @@ curl -X POST http://127.0.0.1:8000/api/persons/1/faces \
 ```
 
 接口会返回本次保存的人脸特征记录列表，其中 `embedding` 字段目前是模拟特征向量。
+
+## 识别人脸接口测试
+
+当前阶段的识别接口仍使用 `backend/face_service.py` 中的占位 `extract_embedding(image)` 生成模拟特征，不会接入 InsightFace，也不会下载人脸识别模型。接口使用 `multipart/form-data` 上传单张图片，文件字段名必须为 `file`，路径为 `POST /api/recognize`。
+
+如果使用与注册时相同的图片，由于占位 embedding 是基于图片内容确定性生成的，通常会命中已注册人员：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/recognize \
+  -F "file=@/path/to/face-1.jpg"
+```
+
+响应字段说明：
+
+- `name`：识别到的人员姓名；未达到阈值时为 `未知`。
+- `person_code`：识别到的人员编号；未达到阈值时为 `null`。
+- `similarity`：与库中最佳匹配人脸特征的余弦相似度；当前为空库时为 `null`。
+- `status`：识别状态，`recognized` 表示相似度达到阈值，`unknown` 表示未达到阈值或暂无已注册人脸。
+
+识别完成后可以查询最近识别记录：
+
+```bash
+curl http://127.0.0.1:8000/api/records
+```
 
 ## 暂未实现
 
