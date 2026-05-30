@@ -1,6 +1,6 @@
 # FastAPI 后端基础框架
 
-这是人脸识别系统课程项目的第一阶段后端框架。当前只包含人员与识别记录的基础 API、SQLite 初始化逻辑，暂未接入 InsightFace 或其他人脸识别模型。
+这是人脸识别系统课程项目的第二阶段后端框架。在第一阶段的人员与识别记录基础 API、SQLite 初始化逻辑之上，当前增加了人脸照片注册接口，但仍未接入 InsightFace 或其他人脸识别模型。
 
 ## 环境要求
 
@@ -59,7 +59,7 @@ backend/data/face_system.db
 
 ## 注册人脸照片接口测试
 
-当前阶段的人脸特征提取仍是可替换的占位实现，不会接入 InsightFace，也不会下载人脸识别模型。接口支持使用 `multipart/form-data` 一次上传多张图片，文件字段名必须为 `files`。
+当前阶段的人脸特征提取仍是可替换的占位实现，不会接入 InsightFace，也不会下载人脸识别模型。接口支持使用 `multipart/form-data` 一次上传多张图片，文件字段名必须为 `files`，路径为 `POST /api/persons/{person_id}/faces`。
 
 先创建一个人员：
 
