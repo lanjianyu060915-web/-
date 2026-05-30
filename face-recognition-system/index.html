@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>人脸识别系统</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Face Intelligence</p>
+            <h1>人脸识别系统</h1>
+          </div>
+          <div class="status" id="engineStatus">正在检测浏览器能力</div>
+        </header>
+
+        <section class="upload-panel" id="dropZone">
+          <input id="fileInput" type="file" accept="image/*,video/*" hidden />
+          <div class="upload-copy">
+            <strong>上传图片识别身份</strong>
+            <p>支持 JPG、PNG、WebP、MP4、WebM，文件只在本地浏览器内分析。</p>
+          </div>
+          <button class="upload-button" type="button" id="uploadButton">上传照片或视频</button>
+        </section>
+
+        <section class="viewer" aria-label="识别预览">
+          <div class="stage" id="stage">
+            <img id="imagePreview" alt="上传的照片预览" hidden />
+            <video id="videoPreview" controls playsinline hidden></video>
+            <canvas id="overlay"></canvas>
+            <div class="empty-state" id="emptyState">等待上传文件</div>
+          </div>
+          <div class="controls">
+            <button class="primary" type="button" id="detectButton" disabled>开始识别</button>
+            <button class="secondary" type="button" id="pauseButton" disabled>暂停视频识别</button>
+            <button class="secondary" type="button" id="resetButton">重置</button>
+          </div>
+        </section>
+
+        <section class="panel result-panel">
+          <div class="panel-title">
+            <h2>识别结果</h2>
+            <span id="lastRun">暂无记录</span>
+          </div>
+          <div class="face-list" id="faceList"></div>
+          <div class="hint" id="resultHint">识别完成后会显示姓名和相似度。</div>
+        </section>
+      </section>
+
+      <aside class="inspector">
+        <section class="metric-grid">
+          <div class="metric">
+            <span>当前人脸</span>
+            <strong id="faceCount">0</strong>
+          </div>
+          <div class="metric">
+            <span>文件类型</span>
+            <strong id="fileTypeMetric">未上传</strong>
+          </div>
+          <div class="metric">
+            <span>人脸库人员</span>
+            <strong id="libraryCount">0</strong>
+          </div>
+          <div class="metric">
+            <span>识别记录</span>
+            <strong id="recordCount">0</strong>
+          </div>
+          <div class="metric">
+            <span>状态</span>
+            <strong id="detectState">待识别</strong>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>人员信息录入 / 人脸照片注册</h2>
+            <span id="registrationStatus">等待录入</span>
+          </div>
+          <form id="personForm" class="person-form">
+            <div class="field-grid">
+              <label>
+                <span>姓名</span>
+                <input id="personName" type="text" placeholder="例如：张三" required />
+              </label>
+              <label>
+                <span>人员编号</span>
+                <input id="personCode" type="text" placeholder="例如：A001" />
+              </label>
+              <label>
+                <span>部门</span>
+                <input id="personDept" type="text" placeholder="例如：安保部" />
+              </label>
+              <label>
+                <span>备注</span>
+                <input id="personNote" type="text" placeholder="例如：门禁白名单" />
+              </label>
+            </div>
+            <label class="file-field">
+              <span>批量导入照片</span>
+              <input id="registerFiles" type="file" accept="image/*" multiple />
+            </label>
+            <div class="form-actions">
+              <button class="primary" type="submit" id="registerButton">注册人脸并提取特征</button>
+              <button class="secondary" type="button" id="clearFormButton">清空表单</button>
+            </div>
+            <p class="hint" id="registrationHint">
+              每张照片会提取本地特征向量并写入人脸库。建议使用正脸、光线稳定的照片。
+            </p>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>人脸库管理</h2>
+            <span id="librarySummary">暂无人员</span>
+          </div>
+          <div class="library-list" id="libraryList"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>识别记录保存</h2>
+            <span id="recordSummary">暂无记录</span>
+          </div>
+          <div class="record-list" id="recordList"></div>
+        </section>
+
+        <div class="hint" id="supportHint">
+          当前系统依赖浏览器内置人脸检测能力。若按钮不可用，请使用新版 Chrome 或 Edge 打开。
+        </div>
+      </aside>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
