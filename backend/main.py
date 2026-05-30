@@ -20,7 +20,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import DATABASE_PATH, init_db, iter_connection
 from face_service import extract_embedding
-from schemas import FaceEmbedding, HealthResponse, Person, PersonCreate, RecognitionRecord
+from schemas import (
+    FaceEmbedding,
+    HealthResponse,
+    Person,
+    PersonCreate,
+    RecognitionRecord,
+    RecognitionResult,
+)
 
 
 @asynccontextmanager
@@ -40,6 +47,23 @@ app.add_middleware(
 )
 
 Connection = Annotated[sqlite3.Connection, Depends(iter_connection)]
+
+RECOGNITION_THRESHOLD = 0.84
+UNKNOWN_NAME = "未知"
+
+
+def calculate_similarity(left: list[float], right: list[float]) -> float:
+    """Calculate cosine similarity for two embedding vectors."""
+    if len(left) != len(right):
+        return 0.0
+
+    dot_product = sum(left_value * right_value for left_value, right_value in zip(left, right))
+    left_norm = sum(value * value for value in left) ** 0.5
+    right_norm = sum(value * value for value in right) ** 0.5
+    if left_norm == 0 or right_norm == 0:
+        return 0.0
+
+    return dot_product / (left_norm * right_norm)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -171,6 +195,72 @@ def register_person_faces(
     ]
 
 
+@app.post(
+    "/api/recognize",
+    response_model=RecognitionResult,
+    summary="识别人脸照片",
+    description="上传一张图片，使用当前阶段的占位人脸特征与已注册特征逐个比对。",
+)
+def recognize_face(
+    connection: Connection,
+    file: UploadFile = File(...),
+) -> dict:
+    image_bytes = file.file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="识别图片不能为空")
+
+    query_embedding = extract_embedding(image_bytes)
+    rows = connection.execute(
+        """
+        SELECT
+            face_embeddings.embedding_json,
+            persons.id AS person_id,
+            persons.name,
+            persons.person_code
+        FROM face_embeddings
+        JOIN persons ON persons.id = face_embeddings.person_id
+        ORDER BY face_embeddings.id
+        """
+    ).fetchall()
+
+    best_match: dict | None = None
+    best_similarity = 0.0
+    for row in rows:
+        stored_embedding = json.loads(row["embedding_json"])
+        similarity = calculate_similarity(query_embedding, stored_embedding)
+        if best_match is None or similarity > best_similarity:
+            best_similarity = similarity
+            best_match = dict(row)
+
+    is_recognized = best_match is not None and best_similarity >= RECOGNITION_THRESHOLD
+    result = {
+        "name": best_match["name"] if is_recognized and best_match else UNKNOWN_NAME,
+        "person_code": best_match["person_code"] if is_recognized and best_match else None,
+        "similarity": round(best_similarity, 6) if best_match else None,
+        "status": "recognized" if is_recognized else "unknown",
+    }
+
+    connection.execute(
+        """
+        INSERT INTO recognition_records (
+            person_id, person_name, person_code, source_name, similarity, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            best_match["person_id"] if is_recognized and best_match else None,
+            result["name"],
+            result["person_code"],
+            file.filename,
+            result["similarity"],
+            result["status"],
+        ),
+    )
+    connection.commit()
+
+    return result
+
+
 @app.delete(
     "/api/persons/{person_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -191,6 +281,7 @@ def list_records(connection: Connection) -> list[dict]:
         SELECT id, person_id, person_name, person_code, source_name, similarity, status, created_at
         FROM recognition_records
         ORDER BY id DESC
+        LIMIT 50
         """
     )
     return [dict(row) for row in cursor.fetchall()]
