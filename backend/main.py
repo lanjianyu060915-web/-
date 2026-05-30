@@ -19,7 +19,13 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import DATABASE_PATH, init_db, iter_connection
-from face_service import extract_embedding
+from face_service import (
+    FaceModelUnavailableError,
+    InvalidFaceImageError,
+    NoFaceDetectedError,
+    extract_embedding,
+    extract_embeddings,
+)
 from schemas import (
     FaceEmbedding,
     HealthResponse,
@@ -121,7 +127,7 @@ def create_person(payload: PersonCreate, connection: Connection) -> dict:
     response_model=list[FaceEmbedding],
     status_code=status.HTTP_201_CREATED,
     summary="注册人员人脸照片",
-    description="为指定人员上传一张或多张人脸照片，并保存当前阶段的占位人脸特征。",
+    description="为指定人员上传一张或多张人脸照片，检测人脸并保存真实 InsightFace embedding。",
 )
 def register_person_faces(
     person_id: int,
@@ -145,7 +151,17 @@ def register_person_faces(
             file_name = uploaded_file.filename or "未命名文件"
             raise HTTPException(status_code=422, detail=f"文件 {file_name} 为空")
 
-        embedding = extract_embedding(image_bytes)
+        try:
+            embedding = extract_embedding(image_bytes)
+        except NoFaceDetectedError as exc:
+            file_name = uploaded_file.filename or "未命名文件"
+            raise HTTPException(status_code=422, detail=f"文件 {file_name} 未检测到人脸：{exc}") from exc
+        except InvalidFaceImageError as exc:
+            file_name = uploaded_file.filename or "未命名文件"
+            raise HTTPException(status_code=422, detail=f"文件 {file_name} 图片无效：{exc}") from exc
+        except FaceModelUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
         cursor = connection.execute(
             """
             INSERT INTO face_embeddings (person_id, file_name, content_type, embedding_json)
@@ -199,7 +215,7 @@ def register_person_faces(
     "/api/recognize",
     response_model=RecognitionResult,
     summary="识别人脸照片",
-    description="上传一张图片，使用当前阶段的占位人脸特征与已注册特征逐个比对。",
+    description="上传一张图片，检测人脸并使用真实 InsightFace embedding 与已注册特征逐个比对。",
 )
 def recognize_face(
     connection: Connection,
@@ -209,7 +225,15 @@ def recognize_face(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="识别图片不能为空")
 
-    query_embedding = extract_embedding(image_bytes)
+    try:
+        query_faces = extract_embeddings(image_bytes)
+    except NoFaceDetectedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except InvalidFaceImageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FaceModelUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     rows = connection.execute(
         """
         SELECT
@@ -227,10 +251,11 @@ def recognize_face(
     best_similarity = 0.0
     for row in rows:
         stored_embedding = json.loads(row["embedding_json"])
-        similarity = calculate_similarity(query_embedding, stored_embedding)
-        if best_match is None or similarity > best_similarity:
-            best_similarity = similarity
-            best_match = dict(row)
+        for query_face in query_faces:
+            similarity = calculate_similarity(query_face.embedding, stored_embedding)
+            if best_match is None or similarity > best_similarity:
+                best_similarity = similarity
+                best_match = dict(row)
 
     is_recognized = best_match is not None and best_similarity >= RECOGNITION_THRESHOLD
     result = {
